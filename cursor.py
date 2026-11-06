@@ -17,7 +17,7 @@ clock = pygame.time.Clock()
 # Координаты самолета
 plane_x = WIDTH // 2
 plane_y = HEIGHT // 2
-PLANE_SPEED = 6
+PLANE_SPEED = 10
 
 # Список для хранения точек дымового следа
 trail_particles = []
