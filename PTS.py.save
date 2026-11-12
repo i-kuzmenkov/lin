@@ -1,0 +1,279 @@
+import math
+import tkinter as tk
+
+WIN_W = 900
+WIN_H = 650
+MAP_W = 2400
+MAP_H = 2400
+
+root = tk.Tk()
+root.title("Симулятор Автобуса: Карта Города")
+root.resizable(False, False)
+
+canvas = tk.Canvas(root, width=WIN_W, height=WIN_H, bg="#27ae60", highlightthickness=0)
+canvas.pack()
+
+score = 0
+passengers_in_bus = 0
+max_capacity = 12
+stop_timer = 0
+
+bus = {
+    "x": 400.0,
+    "y": 400.0,
+    "width": 52,
+    "height": 26,
+    "angle": 0.0,
+    "speed": 0.0,
+    "max_speed": 7.5,
+    "friction": 0.95,
+    "turn_speed": 0.06,
+}
+
+road_x = (400, 1200, 2000)
+road_y = (400, 1200, 2000)
+ROAD_WIDTH = 130
+
+blocks = [
+    {"x": 520, "y": 520, "w": 260, "h": 220, "color": "#d35400", "type": "b"},
+    {"x": 820, "y": 520, "w": 260, "h": 220, "color": "#e67e22", "type": "b"},
+    {"x": 520, "y": 780, "w": 560, "h": 300, "color": "#2ecc71", "type": "p"},
+    {"x": 1320, "y": 520, "w": 560, "h": 250, "color": "#2980b9", "type": "b"},
+    {"x": 1320, "y": 810, "w": 260, "h": 270, "color": "#3498db", "type": "b"},
+    {"x": 1620, "y": 810, "w": 260, "h": 270, "color": "#1abc9c", "type": "b"},
+    {"x": 520, "y": 1320, "w": 560, "h": 260, "color": "#7f8c8d", "type": "b"},
+    {"x": 520, "y": 1620, "w": 260, "h": 260, "color": "#95a5a6", "type": "b"},
+    {"x": 820, "y": 1620, "w": 260, "h": 260, "color": "#2ecc71", "type": "p"},
+    {"x": 1320, "y": 1320, "w": 260, "h": 560, "color": "#8e44ad", "type": "b"},
+    {"x": 1620, "y": 1320, "w": 260, "h": 260, "color": "#9b59b6", "type": "b"},
+    {"x": 1620, "y": 1620, "w": 260, "h": 260, "color": "#c0392b", "type": "b"},
+]
+
+stops = [
+    {"x": 800, "y": 400, "r": 45, "wait": 4, "depot": False, "name": "ул. Парковая"},
+    {"x": 1600, "y": 400, "r": 45, "wait": 3, "depot": False, "name": "Бизнес-центр"},
+    {"x": 400, "y": 1200, "r": 45, "wait": 5, "depot": False, "name": "Заводская"},
+    {"x": 1200, "y": 1200, "r": 45, "wait": 4, "depot": False, "name": "Площадь Ленина"},
+    {"x": 2000, "y": 1200, "r": 45, "wait": 3, "depot": False, "name": "Университет"},
+    {"x": 800, "y": 2000, "r": 45, "wait": 4, "depot": False, "name": "Южный рынок"},
+    {"x": 2000, "y": 2000, "r": 55, "wait": 0, "depot": True, "name": "ГЛАВНЫЙ ВОКЗАЛ (Высадка)"},
+]
+
+pressed_keys = set()
+pressed_codes = set()
+mouse_ctrl = {"active": False, "x": WIN_W / 2, "y": WIN_H / 2}
+
+def on_key_press(event):
+    pressed_keys.add(event.keysym.lower())
+    pressed_codes.add(event.keycode)
+
+def on_key_release(event):
+    pressed_keys.discard(event.keysym.lower())
+    pressed_codes.discard(event.keycode)
+
+def on_mouse_down(event):
+    canvas.focus_set()
+    mouse_ctrl["active"] = True
+    mouse_ctrl["x"] = event.x
+    mouse_ctrl["y"] = event.y
+
+def on_mouse_move(event):
+    if mouse_ctrl["active"]:
+        mouse_ctrl["x"] = event.x
+        mouse_ctrl["y"] = event.y
+
+def on_mouse_up(event):
+    mouse_ctrl["active"] = False
+
+root.bind("<KeyPress>", on_key_press)
+root.bind("<KeyRelease>", on_key_release)
+canvas.bind("<Button-1>", on_mouse_down)
+canvas.bind("<B1-Motion>", on_mouse_move)
+canvas.bind("<ButtonRelease-1>", on_mouse_up)
+
+def is_up():
+    return bool(pressed_keys & {"up", "w", "cyrillic_tse"}) or bool(pressed_codes & {111, 25})
+
+def is_down():
+    return bool(pressed_keys & {"down", "s", "cyrillic_yeru"}) or bool(pressed_codes & {116, 39})
+
+def is_left():
+    return bool(pressed_keys & {"left", "a", "cyrillic_ef"}) or bool(pressed_codes & {113, 38})
+
+def is_right():
+    return bool(pressed_keys & {"right", "d", "cyrillic_ve"}) or bool(pressed_codes & {114, 40})
+
+def is_brake():
+    return ("space" in pressed_keys) or (65 in pressed_codes)
+
+def spawn_passengers():
+    for stop in stops:
+        if not stop["depot"] and stop["wait"] < 7:
+            stop["wait"] += 1
+    root.after(4500, spawn_passengers)
+
+def game_loop():
+    global score, passengers_in_bus, stop_timer
+
+    if is_brake():
+        bus["speed"] *= 0.80
+    else:
+        if is_up():
+            bus["speed"] += 0.35
+        if is_down():
+            bus["speed"] -= 0.25
+
+    if mouse_ctrl["active"]:
+        dx = mouse_ctrl["x"] - WIN_W / 2
+        dy = mouse_ctrl["y"] - WIN_H / 2
+        if math.hypot(dx, dy) > 30:
+            target_angle = math.atan2(dy, dx)
+            diff = (target_angle - bus["angle"] + math.pi) % (2 * math.pi) - math.pi
+            bus["angle"] += max(-bus["turn_speed"], min(bus["turn_speed"], diff))
+            bus["speed"] += 0.35
+
+    bus["speed"] = max(-bus["max_speed"] / 2, min(bus["max_speed"], bus["speed"]))
+    bus["speed"] *= bus["friction"]
+    if abs(bus["speed"]) < 0.05:
+        bus["speed"] = 0.0
+
+    if abs(bus["speed"]) > 0.05 or is_up() or is_down():
+        direction = -1 if bus["speed"] < -0.1 else 1
+        if is_left():
+            bus["angle"] -= bus["turn_speed"] * direction
+        if is_right():
+            bus["angle"] += bus["turn_speed"] * direction
+
+    bus["x"] += math.cos(bus["angle"]) * bus["speed"]
+    bus["y"] += math.sin(bus["angle"]) * bus["speed"]
+
+    bus["x"] = max(50, min(MAP_W - 50, bus["x"]))
+    bus["y"] = max(50, min(MAP_H - 50, bus["y"]))
+
+    if abs(bus["speed"]) < 0.4:
+        for stop in stops:
+            if math.hypot(bus["x"] - stop["x"], bus["y"] - stop["y"]) < stop["r"]:
+                stop_timer += 1
+                if stop_timer > 10:
+                    if stop["depot"] and passengers_in_bus > 0:
+                        score += passengers_in_bus * 15
+                        passengers_in_bus = 0
+                    elif not stop["depot"] and stop["wait"] > 0 and passengers_in_bus < max_capacity:
+                        stop["wait"] -= 1
+                        passengers_in_bus += 1
+                    stop_timer = 0
+    else:
+        stop_timer = 0
+
+    cam_x = bus["x"] - WIN_W / 2
+    cam_y = bus["y"] - WIN_H / 2
+    hw_road = ROAD_WIDTH / 2
+
+    canvas.delete("all")
+
+    for rx in road_x:
+        canvas.create_rectangle(rx - hw_road - cam_x, 400 - hw_road - cam_y, rx + hw_road - cam_x, 2000 + hw_road - cam_y, fill="#34495e", outline="")
+        canvas.create_line(rx - cam_x, 400 - cam_y, rx - cam_x, 2000 - cam_y, fill="#ecf0f1", width=3, dash=(15, 15))
+
+    for ry in road_y:
+        canvas.create_rectangle(400 - hw_road - cam_x, ry - hw_road - cam_y, 2000 + hw_road - cam_x, ry + hw_road - cam_y, fill="#34495e", outline="")
+        canvas.create_line(400 - cam_x, ry - cam_y, 2000 - cam_x, ry - cam_y, fill="#ecf0f1", width=3, dash=(15, 15))
+
+    for rx in road_x:
+        for ry in road_y:
+            canvas.create_rectangle(rx - hw_road - cam_x, ry - hw_road - cam_y, rx + hw_road - cam_x, ry + hw_road - cam_y, fill="#2c3e50", outline="")
+
+    for b in blocks:
+        bx1, by1 = b["x"] - cam_x, b["y"] - cam_y
+        bx2, by2 = bx1 + b["w"], by1 + b["h"]
+        if bx2 < 0 or bx1 > WIN_W or by2 < 0 or by1 > WIN_H:
+            continue
+        canvas.create_rectangle(bx1, by1, bx2, by2, fill=b["color"], outline="#1c2833", width=3)
+        if b["type"] == "b":
+            canvas.create_rectangle(bx1 + 15, by1 + 15, bx2 - 15, by2 - 15, outline="#ecf0f1", width=1)
+        else:
+            for tx in range(int(bx1 + 40), int(bx2 - 20), 70):
+                for ty in range(int(by1 + 40), int(by2 - 20), 70):
+                    canvas.create_oval(tx - 15, ty - 15, tx + 15, ty + 15, fill="#1e8449", outline="#145a32")
+
+    for stop in stops:
+        sx, sy = stop["x"] - cam_x, stop["y"] - cam_y
+        r = stop["r"]
+        fill_c = "#27ae60" if stop["depot"] else "#b7950b"
+        out_c = "#2ecc71" if stop["depot"] else "#f1c40f"
+        canvas.create_oval(sx - r, sy - r, sx + r, sy + r, fill=fill_c, outline=out_c, width=3)
+        canvas.create_text(sx, sy - r - 14, text=stop["name"], fill="white", font=("Arial", 11, "bold"))
+        if not stop["depot"]:
+            for i in range(stop["wait"]):
+                px = sx - 18 + (i * 7)
+                canvas.create_oval(px - 4, sy - 4, px + 4, sy + 4, fill="#e74c3c", outline="white")
+
+    cos_a = math.cos(bus["angle"])
+    sin_a = math.sin(bus["angle"])
+    hw = bus["width"] / 2
+    hh = bus["height"] / 2
+
+    def rot(px, py):
+        return ((bus["x"] - cam_x) + (px * cos_a - py * sin_a), (bus["y"] - cam_y) + (px * sin_a + py * cos_a))
+
+    canvas.create_polygon(rot(-hw, -hh), rot(hw, -hh), rot(hw, hh), rot(-hw, hh), fill="#f39c12", outline="#d35400", width=2)
+    canvas.create_polygon(rot(hw - 10, -hh + 3), rot(hw - 3, -hh + 3), rot(hw - 3, hh - 3), rot(hw - 10, hh - 3), fill="#3498db")
+
+    canvas.create_rectangle(15, 15, 250, 85, fill="#1c2833", outline="#ecf0f1", width=2)
+    canvas.create_text(25, 38, anchor="w", text=f"Пассажиры: {passengers_in_bus} / {max_capacity}", fill="white", font=("Arial", 12, "bold"))
+    canvas.create_text(25, 65, anchor="w", text=f"Очки: {score}", fill="#f1c40f", font=("Arial", 12, "bold"))
+
+    canvas.create_rectangle(15, WIN_H - 40, 620, WIN_H - 10, fill="#1c2833", outline="#ecf0f1")
+    canvas.create_text(25, WIN_H - 25, anchor="w", text="Управление: Стрелки / WASD / ЦФЫВ | Пробел: тормоз | Или зажмите ЛКМ", fill="white", font=("Arial", 10))
+
+    mm_size = 160
+    mm_x = WIN_W - mm_size - 15
+    mm_y = 15
+    scale = mm_size / MAP_W
+
+    canvas.create_rectangle(mm_x, mm_y, mm_x + mm_size, mm_y + mm_size, fill="#1c2833", outline="#ecf0f1", width=2)
+    for rx in road_x:
+        canvas.create_line(mm_x + rx * scale, mm_y + 400 * scale, mm_x + rx * scale, mm_y + 2000 * scale, fill="#7f8c8d", width=4)
+    for ry in road_y:
+        canvas.create_line(mm_x + 400 * scale, mm_y + ry * scale, mm_x + 2000 * scale, mm_y + ry * scale, fill="#7f8c8d", width=4)
+
+    for stop in stops:
+        mx = mm_x + stop["x"] * scale
+        my = mm_y + stop["y"] * scale
+        if stop["depot"]:
+            canvas.create_oval(mx - 4, my - 4, mx + 4, my + 4, fill="#2ecc71", outline="")
+        elif stop["wait"] > 0:
+            canvas.create_oval(mx - 3, my - 3, mx + 3, my + 3, fill="#f1c40f", outline="")
+
+    bx_mm = mm_x + bus["x"] * scale
+    by_mm = mm_y + bus["y"] * scale/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+/home/iakov/gith/venv/bin/python /home/iakov/gith/lin/PTS.py
+
+
