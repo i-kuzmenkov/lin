@@ -6,11 +6,16 @@ from tkinter import messagebox, simpledialog
 WIDTH, HEIGHT = 900, 480
 GRID = 40
 FLOOR_Y = HEIGHT - GRID
+MAX_SKY_Y = -1200  # Максимальная высота уровня (30 клеток над экраном)
 FPS_MS = 16
 
 GRAVITY = 0.85
 JUMP_FORCE = -13.5
 SPEED = 6.5
+
+SHIP_THRUST = -0.75
+SHIP_GRAVITY = 0.65
+SHIP_MAX_VY = 7.5
 
 LEVELS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "levels.json")
 
@@ -20,10 +25,12 @@ def get_default_levels():
         "Стартовый уровень": {
             "8,10": "spike",
             "13,10": "block", "14,10": "block", "14,9": "spike",
-            "19,10": "block", "20,10": "block", "20,9": "block",
-            "21,10": "block", "21,9": "block", "21,8": "block",
-            "25,10": "spike", "26,10": "spike",
-            "31,10": "goal",
+            "18,10": "portal_ship",
+            "23,10": "spike", "24,10": "spike", "25,10": "spike",
+            "24,2": "block", "24,3": "block",
+            "29,10": "portal_cube",
+            "34,10": "spike",
+            "39,10": "goal",
         }
     }
 
@@ -38,9 +45,10 @@ class CubeDashApp:
         self.saved_levels = self.load_levels_from_disk()
         self.current_level_name = "Новый уровень"
 
-        self.screen_state = "menu"  # "menu", "edit", "play"
+        self.screen_state = "menu"
         self.tool = "move"
         self.camera_x = 0.0
+        self.camera_y = 0.0
         self.won = False
         self.dead_timer = 0
 
@@ -57,6 +65,7 @@ class CubeDashApp:
             "vy": 0.0,
             "grounded": True,
             "dead": False,
+            "mode": "cube",
         }
 
         self.main_container = tk.Frame(self.root, bg="#161626")
@@ -102,7 +111,6 @@ class CubeDashApp:
         for widget in self.main_container.winfo_children():
             widget.destroy()
 
-    # ================= ГЛАВНОЕ МЕНЮ =================
     def show_menu(self):
         self.screen_state = "menu"
         self.dragging_obj = None
@@ -142,7 +150,6 @@ class CubeDashApp:
             command=self.create_new_level,
         ).pack(pady=(0, 20))
 
-        # Контейнер списка уровней со скроллом
         list_wrapper = tk.Frame(menu_frame, bg="#1e1e2e", bd=2, relief=tk.FLAT)
         list_wrapper.pack(padx=120, fill=tk.BOTH, expand=True, pady=(0, 25))
 
@@ -248,14 +255,14 @@ class CubeDashApp:
             self.save_levels_to_disk()
             messagebox.showinfo("Готово!", f"Уровень «{clean_name}» выложен в главное меню!")
 
-    # ================= ЭКРАН ИГРЫ И РЕДАКТОРА =================
     def open_game_screen(self, start_mode="edit"):
         self.clear_container()
         self.screen_state = start_mode
         self.camera_x = 0.0
+        self.camera_y = 0.0
         self.won = False
 
-        toolbar = tk.Frame(self.main_container, bg="#1e1e2e", pady=7, padx=8)
+        toolbar = tk.Frame(self.main_container, bg="#1e1e2e", pady=7, padx=6)
         toolbar.pack(fill=tk.X)
 
         self.tool_buttons = {}
@@ -263,6 +270,8 @@ class CubeDashApp:
             ("move", "Двигать"),
             ("block", "Блок"),
             ("spike", "Шип"),
+            ("portal_ship", "Самолёт"),
+            ("portal_cube", "Куб"),
             ("goal", "Финиш"),
             ("erase", "Ластик"),
         )
@@ -271,11 +280,11 @@ class CubeDashApp:
             btn = tk.Button(
                 toolbar,
                 text=label,
-                font=("Sans", 9, "bold"),
+                font=("Sans", 8, "bold"),
                 bg="#2b2b40",
                 fg="white",
                 relief=tk.FLAT,
-                padx=8,
+                padx=6,
                 pady=4,
                 command=lambda t=tid: self.set_tool(t),
             )
@@ -285,11 +294,11 @@ class CubeDashApp:
         self.clear_btn = tk.Button(
             toolbar,
             text="Очистить",
-            font=("Sans", 9, "bold"),
+            font=("Sans", 8, "bold"),
             bg="#2b2b40",
             fg="white",
             relief=tk.FLAT,
-            padx=8,
+            padx=6,
             pady=4,
             command=self.clear_level,
         )
@@ -298,25 +307,24 @@ class CubeDashApp:
         self.publish_btn = tk.Button(
             toolbar,
             text="Выложить",
-            font=("Sans", 9, "bold"),
+            font=("Sans", 8, "bold"),
             bg="#6c5ce7",
             fg="white",
             relief=tk.FLAT,
-            padx=10,
+            padx=8,
             pady=4,
             command=self.publish_level,
         )
-        self.publish_btn.pack(side=tk.LEFT, padx=(8, 2))
+        self.publish_btn.pack(side=tk.LEFT, padx=(6, 2))
 
-        # Кнопка паузы / выхода в главное меню
         self.menu_btn = tk.Button(
             toolbar,
             text="Меню (Esc)",
-            font=("Sans", 9, "bold"),
+            font=("Sans", 8, "bold"),
             bg="#d63031",
             fg="white",
             relief=tk.FLAT,
-            padx=10,
+            padx=8,
             pady=4,
             command=self.show_menu,
         )
@@ -325,11 +333,11 @@ class CubeDashApp:
         self.play_btn = tk.Button(
             toolbar,
             text="ИГРАТЬ",
-            font=("Sans", 9, "bold"),
+            font=("Sans", 8, "bold"),
             bg="#00b894",
             fg="#12121a",
             relief=tk.FLAT,
-            padx=12,
+            padx=10,
             pady=4,
             command=self.toggle_mode,
         )
@@ -386,6 +394,7 @@ class CubeDashApp:
         if self.screen_state == "edit":
             self.level.clear()
             self.camera_x = 0.0
+            self.camera_y = 0.0
 
     def reset_player(self):
         self.player = {
@@ -394,8 +403,10 @@ class CubeDashApp:
             "vy": 0.0,
             "grounded": True,
             "dead": False,
+            "mode": "cube",
         }
         self.camera_x = 0.0
+        self.camera_y = 0.0
         self.won = False
         self.dead_timer = 0
 
@@ -407,6 +418,7 @@ class CubeDashApp:
         elif self.screen_state == "play":
             self.screen_state = "edit"
             self.camera_x = 0.0
+            self.camera_y = 0.0
             self.won = False
         self.sync_toolbar_state()
 
@@ -426,11 +438,12 @@ class CubeDashApp:
         self.keys.discard(event.keysym.lower())
 
     def screen_to_grid(self, mx, my):
-        return int((mx + self.camera_x) // GRID), int(my // GRID)
+        return int((mx + self.camera_x) // GRID), int((my + self.camera_y) // GRID)
 
     def is_valid_cell(self, gx, gy):
         max_gy = (FLOOR_Y // GRID) - 1
-        if gx < 0 or gy < 0 or gy > max_gy:
+        min_gy = MAX_SKY_Y // GRID
+        if gx < 0 or gy < min_gy or gy > max_gy:
             return False
         if gx == 2 and gy == max_gy:
             return False
@@ -504,8 +517,6 @@ class CubeDashApp:
 
     def update(self):
         if self.screen_state == "menu":
-
-
             return
 
         if self.screen_state == "edit":
@@ -513,6 +524,10 @@ class CubeDashApp:
                 self.camera_x += 10
             if "left" in self.keys or "a" in self.keys:
                 self.camera_x = max(0.0, self.camera_x - 10)
+            if "up" in self.keys or "w" in self.keys:
+                self.camera_y = max(float(MAX_SKY_Y), self.camera_y - 10)
+            if "down" in self.keys or "s" in self.keys:
+                self.camera_y = min(0.0, self.camera_y + 10)
             return
 
         if self.won:
@@ -524,10 +539,19 @@ class CubeDashApp:
                 self.reset_player()
             return
 
-        jump = ("space" in self.keys) or self.mouse_down
-        if jump and self.player["grounded"]:
-            self.player["vy"] = JUMP_FORCE
-            self.player["grounded"] = False
+        action_pressed = ("space" in self.keys) or self.mouse_down
+
+        if self.player["mode"] == "cube":
+            if action_pressed and self.player["grounded"]:
+                self.player["vy"] = JUMP_FORCE
+                self.player["grounded"] = False
+            self.player["vy"] += GRAVITY
+        else:
+            if action_pressed:
+                self.player["vy"] += SHIP_THRUST
+            else:
+                self.player["vy"] += SHIP_GRAVITY
+            self.player["vy"] = max(-SHIP_MAX_VY, min(SHIP_MAX_VY, self.player["vy"]))
 
         self.player["x"] += SPEED
         px, py = self.player["x"], self.player["y"]
@@ -540,7 +564,6 @@ class CubeDashApp:
                     self.player["dead"] = True
                     return
 
-        self.player["vy"] += GRAVITY
         self.player["y"] += self.player["vy"]
         self.player["grounded"] = False
 
@@ -548,6 +571,11 @@ class CubeDashApp:
             self.player["y"] = float(FLOOR_Y - GRID)
             self.player["vy"] = 0.0
             self.player["grounded"] = True
+
+        if self.player["y"] < MAX_SKY_Y:
+            self.player["y"] = float(MAX_SKY_Y)
+            if self.player["vy"] < 0:
+                self.player["vy"] = 0.0
 
         px, py = self.player["x"], self.player["y"]
         p_box = (px + 3, py, px + GRID - 3, py + GRID)
@@ -562,13 +590,25 @@ class CubeDashApp:
                         self.player["vy"] = 0.0
                         self.player["grounded"] = True
                     elif self.player["vy"] < 0:
-                        self.player["dead"] = True
-                        return
+                        if self.player["mode"] == "ship":
+                            self.player["y"] = float(oy + GRID)
+                            self.player["vy"] = 0.0
+                        else:
+                            self.player["dead"] = True
+                            return
             elif obj == "spike":
                 s_box = (ox + 12, oy + 14, ox + GRID - 12, oy + GRID)
                 if self.rects_collide(p_box, s_box):
                     self.player["dead"] = True
                     return
+            elif obj == "portal_ship":
+                p_portal = (ox + 8, oy, ox + GRID - 8, oy + GRID)
+                if self.rects_collide(p_box, p_portal):
+                    self.player["mode"] = "ship"
+            elif obj == "portal_cube":
+                p_portal = (ox + 8, oy, ox + GRID - 8, oy + GRID)
+                if self.rects_collide(p_box, p_portal):
+                    self.player["mode"] = "cube"
             elif obj == "goal":
                 g_box = (ox, oy, ox + GRID, oy + GRID)
                 if self.rects_collide(p_box, g_box):
@@ -576,6 +616,9 @@ class CubeDashApp:
                     return
 
         self.camera_x = max(0.0, self.player["x"] - 180)
+        # Плавное слежение камеры по высоте за игроком
+        target_cy = min(0.0, max(float(MAX_SKY_Y), self.player["y"] - HEIGHT * 0.45))
+        self.camera_y += (target_cy - self.camera_y) * 0.15
 
     def draw_object(self, sx, sy, obj, highlight=False):
         if obj == "block":
@@ -592,6 +635,24 @@ class CubeDashApp:
                 sx + 3, sy + GRID,
                 fill="#ff4757", outline=outline, width=1.5
             )
+        elif obj == "portal_ship":
+            self.canvas.create_oval(
+                sx + 6, sy + 2, sx + GRID - 6, sy + GRID - 2,
+                fill="#4a154b", outline="#ff6b81", width=3
+            )
+            self.canvas.create_text(
+                sx + GRID / 2, sy + GRID / 2,
+                text="САМ", fill="#ff6b81", font=("Sans", 7, "bold")
+            )
+        elif obj == "portal_cube":
+            self.canvas.create_oval(
+                sx + 6, sy + 2, sx + GRID - 6, sy + GRID - 2,
+                fill="#0b4619", outline="#2ed573", width=3
+            )
+            self.canvas.create_text(
+                sx + GRID / 2, sy + GRID / 2,
+                text="КУБ", fill="#2ed573", font=("Sans", 7, "bold")
+            )
         elif obj == "goal":
             self.canvas.create_rectangle(
                 sx, sy, sx + GRID, sy + GRID,
@@ -602,35 +663,77 @@ class CubeDashApp:
                 text="ФИНИШ", fill="#00ffcc", font=("Sans", 7, "bold")
             )
 
+    def draw_player(self, px, py):
+        if self.player["mode"] == "cube":
+            self.canvas.create_rectangle(
+                px, py, px + GRID, py + GRID,
+                fill="#ffeaa7", outline="#fdcb6e", width=3
+            )
+            self.canvas.create_rectangle(px + 22, py + 10, px + 28, py + 16, fill="#2d3436", outline="")
+            self.canvas.create_rectangle(px + 31, py + 10, px + 37, py + 16, fill="#2d3436", outline="")
+            self.canvas.create_rectangle(px + 22, py + 22, px + 37, py + 26, fill="#2d3436", outline="")
+        else:
+            tilt = self.player["vy"] * 1.4
+            self.canvas.create_polygon(
+                px + 2, py + 22 - tilt * 0.4,
+                px + 12, py + 36,
+                px + 34, py + 36,
+                px + GRID, py + 24 + tilt,
+                px + 24, py + 18 + tilt * 0.5,
+                fill="#ff6b81", outline="white", width=2
+            )
+            self.canvas.create_rectangle(
+                px + 14, py + 10 + tilt * 0.3,
+                px + 28, py + 24 + tilt * 0.3,
+                fill="#ffeaa7", outline="#fdcb6e", width=2
+            )
+
     def draw(self):
+
         if self.screen_state == "menu":
             return
 
         self.canvas.delete("all")
-        cx = self.camera_x
+        cx, cy = self.camera_x, self.camera_y
 
         if self.screen_state == "edit":
             start_col = int(cx // GRID)
             end_col = start_col + (WIDTH // GRID) + 2
             for c in range(start_col, end_col):
                 x = c * GRID - cx
-                self.canvas.create_line(x, 0, x, FLOOR_Y, fill="#25253d")
-            for r in range(1, FLOOR_Y // GRID + 1):
-                y = r * GRID
+                self.canvas.create_line(x, 0, x, HEIGHT, fill="#25253d")
+
+            start_row = int(cy // GRID) - 1
+            end_row = start_row + (HEIGHT // GRID) + 3
+            for r in range(start_row, end_row):
+                y = r * GRID - cy
                 self.canvas.create_line(0, y, WIDTH, y, fill="#25253d")
 
             self.canvas.create_rectangle(
-                80 - cx, FLOOR_Y - GRID, 80 - cx + GRID, FLOOR_Y,
+                80 - cx, FLOOR_Y - GRID - cy, 80 - cx + GRID, FLOOR_Y - cy,
                 outline="#00ffcc", width=2
             )
 
-        self.canvas.create_rectangle(0, FLOOR_Y, WIDTH, HEIGHT, fill="#0f0f1a", outline="")
-        self.canvas.create_line(0, FLOOR_Y, WIDTH, FLOOR_Y, fill="#00ffcc", width=2)
+            height_blocks = int(round(-cy / GRID))
+            self.canvas.create_text(
+                75, 18,
+                text=f"Высота: +{height_blocks} (W/S или Стрелки)",
+                fill="#a0a0c0", font=("Sans", 9, "bold"), anchor="w"
+            )
+
+        floor_screen_y = FLOOR_Y - cy
+        if floor_screen_y < HEIGHT:
+            self.canvas.create_rectangle(0, floor_screen_y, WIDTH, HEIGHT, fill="#0f0f1a", outline="")
+            self.canvas.create_line(0, floor_screen_y, WIDTH, floor_screen_y, fill="#00ffcc", width=2)
+
+        sky_screen_y = MAX_SKY_Y - cy
+        if sky_screen_y > 0:
+            self.canvas.create_line(0, sky_screen_y, WIDTH, sky_screen_y, fill="#ff4757", dash=(6, 4), width=2)
 
         for (gx, gy), obj in self.level.items():
             sx = gx * GRID - cx
-            sy = gy * GRID
-            if sx + GRID < 0 or sx > WIDTH:
+            sy = gy * GRID - cy
+            if sx + GRID < 0 or sx > WIDTH or sy + GRID < 0 or sy > HEIGHT:
                 continue
             self.draw_object(sx, sy, obj)
 
@@ -639,7 +742,7 @@ class CubeDashApp:
             gx, gy = self.screen_to_grid(mx, my)
             if self.is_valid_cell(gx, gy) and (gx, gy) not in self.level:
                 snap_x = gx * GRID - cx
-                snap_y = gy * GRID
+                snap_y = gy * GRID - cy
                 self.canvas.create_rectangle(
                     snap_x, snap_y, snap_x + GRID, snap_y + GRID,
                     outline="#00ffcc", dash=(4, 4), width=2
@@ -647,16 +750,7 @@ class CubeDashApp:
             self.draw_object(mx - GRID / 2, my - GRID / 2, self.dragging_obj, highlight=True)
 
         if self.screen_state == "play" and not self.player["dead"]:
-            px = self.player["x"] - cx
-            py = self.player["y"]
-            self.canvas.create_rectangle(
-                px, py, px + GRID, py + GRID,
-                fill="#ffeaa7", outline="#fdcb6e", width=3
-            )
-            self.canvas.create_rectangle(px + 22, py + 10, px + 28, py + 16, fill="#2d3436", outline="")
-            self.canvas.create_rectangle(px + 31, py + 10, px + 37, py + 16, fill="#2d3436", outline="")
-            self.canvas.create_rectangle(px + 22, py + 22, px + 37, py + 26, fill="#2d3436", outline="")
-
+            self.draw_player(self.player["x"] - cx, self.player["y"] - cy)
             self.canvas.create_rectangle(WIDTH - 115, 10, WIDTH - 10, 40, fill="#1e1e2e", outline="#00ffcc", width=1.5)
             self.canvas.create_text(WIDTH - 62, 25, text="II ПАУЗА (Esc)", fill="white", font=("Sans", 9, "bold"))
 
