@@ -1,4 +1,8 @@
-import tkinter as tk, random, math, json, os
+import tkinter as tk
+import random
+import math
+import json
+import os
 
 root = tk.Tk()
 root.title("Симулятор Автобуса")
@@ -6,70 +10,92 @@ root.geometry("820x460+100+100")
 root.bind("<F11>", lambda e: root.attributes("-fullscreen", not root.attributes("-fullscreen")))
 
 BASE_W, BASE_H = 820, 380
-canvas = tk.Canvas(root, width=BASE_W, height=BASE_H, bg="#6ab04c", highlightthickness=0, takefocus=True)
+
 panel = tk.Frame(root, bg="#1e272e")
 panel.pack(fill=tk.X, side=tk.BOTTOM)
-panel.pack(fill=tk.X, side=tk.BOTTOM); canvas.pack(fill=tk.BOTH, expand=True)
-label = tk.Label(panel, text=f"Скорость: 0 км/ч | Деньги: 100р | Пассажиры: 0", font=("Sans", 11, "bold"), bg="#1e272e", fg="white", pady=6)
-label.pack(side=tk.LEFT, padx=10)
+
+btn_row = tk.Frame(panel, bg="#1e272e")
+btn_row.pack(fill=tk.X, side=tk.BOTTOM, padx=4, pady=4)
+
+canvas = tk.Canvas(root, width=BASE_W, height=BASE_H, bg="#6ab04c", highlightthickness=0, takefocus=True)
+canvas.pack(fill=tk.BOTH, expand=True)
+
+label = tk.Label(panel, text="Скорость: 0 км/ч | Деньги: 100р | Пассажиры: 0", font=("Sans", 10, "bold"), bg="#1e272e", fg="white", pady=4)
+label.pack(side=tk.TOP, fill=tk.X)
 
 game_state = "menu"
+money = 100
 bus_color = "#ff9f1a"
 accel_bonus = 0.0
 ticket_price = 35
 cost_color, cost_engine, cost_ticket = 150, 250, 400
 
-SAVE_FILE = "/home/iakov/gith/lin/save.json"
+SAVE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "save.json")
 
 def load_progress():
     global money, bus_color, accel_bonus, ticket_price, cost_color, cost_engine, cost_ticket
     if os.path.exists(SAVE_FILE):
         try:
             with open(SAVE_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                money = data.get("money", 100)
-                bus_color = data.get("bus_color", "#ff9f1a")
-                accel_bonus = data.get("accel_bonus", 0.0)
-                ticket_price = data.get("ticket_price", 35)
-                cost_color = data.get("cost_color", 150)
-                cost_engine = data.get("cost_engine", 250)
-                cost_ticket = data.get("cost_ticket", 400)
+                d = json.load(f)
+                money = d.get("money", 100)
+                bus_color = d.get("bus_color", "#ff9f1a")
+                accel_bonus = d.get("accel_bonus", 0.0)
+                ticket_price = d.get("ticket_price", 35)
+                cost_color = d.get("cost_color", 150)
+                cost_engine = d.get("cost_engine", 250)
+                cost_ticket = d.get("cost_ticket", 400)
         except Exception:
             pass
 
 def save_progress():
     try:
         with open(SAVE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"money": money, "bus_color": bus_color, "accel_bonus": accel_bonus, "ticket_price": ticket_price, "cost_color": cost_color, "cost_engine": cost_engine, "cost_ticket": cost_ticket}, f)
+            json.dump({
+                "money": money, "bus_color": bus_color,
+                "accel_bonus": accel_bonus, "ticket_price": ticket_price,
+                "cost_color": cost_color, "cost_engine": cost_engine,
+                "cost_ticket": cost_ticket
+            }, f)
     except Exception:
         pass
 
 load_progress()
-
 speed, dist, people, board_timer = 0.0, 0.0, 0, 0
 doors, btn_gas, btn_brake = False, False, False
-keys, alert_text, alert_timer, speed_fine_timer, stop_counter = set(), "", 0, 0, 2
+keys = set()
+alert_text, alert_timer, speed_fine_timer, stop_counter = "", 0, 0, 2
+
 dresses = ["#e84118", "#9c88ff", "#fbc531", "#00a8ff", "#4cd137"]
 hairs = ["#2f3640", "#e1b12c", "#8c7ae6", "#c23616", "#574b90"]
 car_colors = ["#e84118", "#0097e6", "#fbc531", "#8c7ae6", "#44bd32", "#f5f6fa"]
+
 buildings = [{"x": i * 160, "w": random.randint(90, 130), "h": random.randint(65, 105), "c": random.choice(["#d1ccc0", "#aaa69d", "#84817a", "#ccae62", "#706fd3"])} for i in range(18)]
 sidewalk_peds = [{"x": i * 300 + 150, "y": 148.0 if i % 2 == 0 else 338.0, "dir": 1 if i % 3 == 0 else -1, "v": random.uniform(0.8, 1.3), "d": dresses[i % 5], "h": hairs[i % 5], "step": 0.0, "cross": 0, "cd": 0} for i in range(14)]
 trees = [{"x": i * 240 + 40} for i in range(15)]
 
 def make_stop(x):
-    return {"x": x, "plist": [{"x": x - 45 + i * 18, "y": 335, "d": dresses[i % 5], "h": hairs[i % 5], "go": False, "step": 0.0} for i in range(random.randint(3, 6))], "exited": False}
+    plist = [{"x": x - 45 + i * 18, "y": 335, "d": dresses[i % 5], "h": hairs[i % 5], "go": False, "step": 0.0} for i in range(random.randint(3, 6))]
+    return {"x": x, "plist": plist, "exited": False}
 
 def make_crosswalk(x, has_light=False):
-    peds = [{"dx": -12 + i * 14, "py": 335.0 if i % 2 == 0 else 145.0, "dir": -1 if i % 2 == 0 else 1, "v": random.uniform(0.9, 1.4), "step": 0.0, "d": random.choice(dresses), "h": random.choice(hairs), "hit": False} for i in range(random.randint(2, 3))]
-    return {"x": x, "peds": peds, "py": 335.0, "dir": -1, "step": 0.0, "d": random.choice(dresses), "h": random.choice(hairs), "fined": False, "hit": False, "light": has_light, "timer": random.randint(0, 500)}
+    return {"x": x, "fined": False, "light": has_light, "timer": random.randint(0, 500)}
 
 stops, crosswalks, cars, exiting_plist = [], [], [], []
+
 def reset_game():
-    global speed, dist, money, people, board_timer, doors, alert_text, alert_timer, speed_fine_timer, stop_counter, stops, crosswalks, cars
-    speed, dist, money, people, board_timer, doors, alert_text, alert_timer, speed_fine_timer, stop_counter = 0.0, 0.0, 100, 0, 0, False, "", 0, 0, 2
+    global speed, dist, people, board_timer, doors, alert_text, alert_timer, speed_fine_timer, stop_counter, stops, crosswalks, cars, exiting_plist
+    speed, dist, people, board_timer = 0.0, 0.0, 0, 0
+    doors, alert_text, alert_timer, speed_fine_timer, stop_counter = False, "", 0, 0, 2
+    exiting_plist = []
     stops = [make_stop(1200), make_stop(4200)]
     crosswalks = [make_crosswalk(2050, False)]
-    cars = [{"x": 650 + i * 480, "y": 248, "v": random.uniform(4.8, 7.8), "c": car_colors[i % 6], "dir": 1} for i in range(4)] + [{"x": 800 + i * 520, "y": 175, "v": random.uniform(-6.8, -4.5), "c": car_colors[(i + 2) % 6], "dir": -1} for i in range(4)]
+    cars = (
+        [{"x": 650 + i * 480, "y": 248, "v": random.uniform(4.8, 7.8), "c": car_colors[i % 6], "dir": 1} for i in range(4)] +
+        [{"x": 800 + i * 520, "y": 175, "v": random.uniform(-6.8, -4.5), "c": car_colors[(i + 2) % 6], "dir": -1} for i in range(4)]
+    )
+    for i, sp in enumerate(sidewalk_peds):
+        sp.update({"x": 450 + i * 300, "y": 148.0 if i % 2 == 0 else 338.0, "cross": 0, "cd": 60})
 
 reset_game()
 
@@ -80,52 +106,9 @@ tk.Label(menu_frame, text="W / Стрелка вверх — Газ | S / Стр
 pause_frame = tk.Frame(canvas, bg="#1e272e", bd=3, relief=tk.RIDGE, padx=30, pady=25)
 tk.Label(pause_frame, text="ПАУЗА", font=("Sans", 20, "bold"), bg="#1e272e", fg="#00a8ff").pack(pady=(0, 15))
 
-def start_game(restart=False):
-    global game_state
-    if restart:
-        reset_game()
-    game_state = "play"
-    menu_frame.place_forget()
-    pause_frame.place_forget()
-    if "shop_frame" in globals(): shop_frame.place_forget()
-    btn_top_pause.place(relx=0.985, rely=0.025, anchor=tk.NE)
-    root.focus_force()
-    canvas.focus_force()
-
-def resume_game():
-    global game_state
-    game_state = "play"
-    pause_frame.place_forget()
-    root.focus_force()
-    canvas.focus_force()
-
-def go_to_menu():
-    global game_state
-    save_progress()
-    game_state = "menu"
-    pause_frame.place_forget()
-    if "shop_frame" in globals(): shop_frame.place_forget()
-    btn_top_pause.place_forget()
-    menu_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-    menu_frame.lift()
-
-def toggle_pause(e=None):
-    if game_state == "play":
-        globals().update(game_state="pause")
-        keys.clear()
-        pause_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-    elif game_state == "pause":
-        resume_game()
-
-btn_top_pause = tk.Button(canvas, text="ПАУЗА", font=("Sans", 10, "bold"), bg="#1e272e", fg="white", bd=2, relief=tk.RIDGE, padx=10, pady=3, command=toggle_pause)
-tk.Button(menu_frame, text="ИГРАТЬ", font=("Sans", 13, "bold"), bg="#27ae60", fg="white", width=18, pady=6, command=start_game).pack(pady=5)
-tk.Button(menu_frame, text="МАГАЗИН", font=("Sans", 12, "bold"), bg="#e67e22", fg="white", width=18, pady=5, command=lambda: open_shop()).pack(pady=5)
-tk.Button(menu_frame, text="ВЫХОД", font=("Sans", 11, "bold"), bg="#c0392b", fg="white", width=18, pady=4, command=root.destroy).pack(pady=5)
-tk.Button(pause_frame, text="ПРОДОЛЖИТЬ", font=("Sans", 12, "bold"), bg="#27ae60", fg="white", width=18, pady=5, command=resume_game).pack(pady=5)
-tk.Button(pause_frame, text="ЗАНОВО", font=("Sans", 12, "bold"), bg="#2980b9", fg="white", width=18, pady=5, command=lambda: start_game(True)).pack(pady=5)
-tk.Button(pause_frame, text="В ГЛАВНОЕ МЕНЮ", font=("Sans", 11, "bold"), bg="#7f8fa6", fg="white", width=18, pady=4, command=go_to_menu).pack(pady=5)
-menu_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-
+gameover_frame = tk.Frame(canvas, bg="#1e272e", bd=4, relief=tk.RIDGE, padx=30, pady=25)
+tk.Label(gameover_frame, text="ИГРА ОКОНЧЕНА", font=("Sans", 22, "bold"), bg="#1e272e", fg="#ff3838").pack(pady=(0, 8))
+tk.Label(gameover_frame, text="Вы сбили пешехода на переходе!", font=("Sans", 11), bg="#1e272e", fg="#dcdde1").pack(pady=(0, 18))
 
 shop_frame = tk.Frame(canvas, bg="#1e272e", bd=3, relief=tk.RIDGE, padx=25, pady=20)
 tk.Label(shop_frame, text="МАГАЗИН УЛУЧШЕНИЙ", font=("Sans", 18, "bold"), bg="#1e272e", fg="#fbc531").pack(pady=(0, 8))
@@ -133,6 +116,52 @@ shop_bal = tk.Label(shop_frame, text=f"Ваш баланс: {money}р", font=("S
 shop_bal.pack(pady=(0, 12))
 shop_msg = tk.Label(shop_frame, text="Выберите улучшение для автобуса", font=("Sans", 10), bg="#1e272e", fg="#dcdde1")
 shop_msg.pack(pady=(0, 10))
+def start_game(restart=False):
+    global game_state
+    if restart:
+        reset_game()
+    game_state = "play"
+    for f in (menu_frame, pause_frame, shop_frame, gameover_frame):
+        f.place_forget()
+    btn_top_pause.place(relx=0.985, rely=0.025, anchor=tk.NE)
+    canvas.focus_set()
+
+def resume_game():
+    global game_state
+    game_state = "play"
+    pause_frame.place_forget()
+    canvas.focus_set()
+
+def go_to_menu():
+    global game_state
+    save_progress()
+    game_state = "menu"
+    for f in (pause_frame, shop_frame, gameover_frame):
+        f.place_forget()
+    btn_top_pause.place_forget()
+    menu_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+    menu_frame.lift()
+
+def toggle_pause(e=None):
+    global game_state
+    if game_state == "play":
+        game_state = "pause"
+        keys.clear()
+        pause_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        pause_frame.lift()
+    elif game_state == "pause":
+        resume_game()
+
+def trigger_game_over():
+    global game_state, speed
+    if game_state == "gameover":
+        return
+    game_state = "gameover"
+    speed = 0.0
+    keys.clear()
+    btn_top_pause.place_forget()
+    gameover_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+    gameover_frame.lift()
 
 def update_shop_btns():
     shop_bal.config(text=f"Ваш баланс: {money}р")
@@ -189,32 +218,76 @@ def buy_ticket():
     else:
         shop_msg.config(text=f"Недостаточно денег (нужно {cost_ticket}р)!", fg="#ff3838")
 
-btn_c = tk.Button(shop_frame, text=f"Новая покраска ({cost_color}р)", font=("Sans", 11, "bold"), bg="#0097e6", fg="white", width=28, pady=4, command=buy_color)
-btn_c.pack(pady=4)
-btn_e = tk.Button(shop_frame, text=f"Турбо-двигатель ({cost_engine}р)", font=("Sans", 11, "bold"), bg="#e67e22", fg="white", width=28, pady=4, command=buy_engine)
-btn_e.pack(pady=4)
-btn_t = tk.Button(shop_frame, text=f"Билеты +{ticket_price + 15}р ({cost_ticket}р)", font=("Sans", 11, "bold"), bg="#8c7ae6", fg="white", width=28, pady=4, command=buy_ticket)
-btn_t.pack(pady=4)
+btn_top_pause = tk.Button(canvas, text="ПАУЗА", font=("Sans", 10, "bold"), bg="#1e272e", fg="white", bd=2, relief=tk.RIDGE, padx=10, pady=3, command=toggle_pause)
+tk.Button(menu_frame, text="ИГРАТЬ", font=("Sans", 13, "bold"), bg="#27ae60", fg="white", width=18, pady=6, command=start_game).pack(pady=5)
+tk.Button(menu_frame, text="МАГАЗИН", font=("Sans", 12, "bold"), bg="#e67e22", fg="white", width=18, pady=5, command=open_shop).pack(pady=5)
+tk.Button(menu_frame, text="ВЫХОД", font=("Sans", 11, "bold"), bg="#c0392b", fg="white", width=18, pady=4, command=lambda: (save_progress(), root.destroy())).pack(pady=5)
+tk.Button(pause_frame, text="ПРОДОЛЖИТЬ", font=("Sans", 12, "bold"), bg="#27ae60", fg="white", width=18, pady=5, command=resume_game).pack(pady=5)
+tk.Button(pause_frame, text="ЗАНОВО", font=("Sans", 12, "bold"), bg="#2980b9", fg="white", width=18, pady=5, command=lambda: start_game(True)).pack(pady=5)
+tk.Button(pause_frame, text="В ГЛАВНОЕ МЕНЮ", font=("Sans", 11, "bold"), bg="#7f8fa6", fg="white", width=18, pady=4, command=go_to_menu).pack(pady=5)
+tk.Button(gameover_frame, text="НАЧАТЬ ЗАНОВО", font=("Sans", 12, "bold"), bg="#27ae60", fg="white", width=20, pady=5, command=lambda: start_game(True)).pack(pady=5)
+tk.Button(gameover_frame, text="В ГЛАВНОЕ МЕНЮ", font=("Sans", 11, "bold"), bg="#7f8fa6", fg="white", width=20, pady=4, command=go_to_menu).pack(pady=5)
+def reset_all_progress():
+    global money, bus_color, accel_bonus, ticket_price, cost_color, cost_engine, cost_ticket
+    money = 100
+    bus_color = "#ff9f1a"
+    accel_bonus = 0.0
+    ticket_price = 35
+    cost_color, cost_engine, cost_ticket = 150, 250, 400
+    save_progress()
+    reset_game()
+    update_shop_btns()
+    shop_msg.config(text="Весь прогресс сброшен на начало!", fg="#fbc531")
+
+btn_c = tk.Button(shop_frame, text=f"Новая покраска ({cost_color}р)", font=("Sans", 11, "bold"), bg="#0097e6", fg="white", width=28, pady=4, command=buy_color); btn_c.pack(pady=4)
+btn_e = tk.Button(shop_frame, text=f"Турбо-двигатель ({cost_engine}р)", font=("Sans", 11, "bold"), bg="#e67e22", fg="white", width=28, pady=4, command=buy_engine); btn_e.pack(pady=4)
+btn_t = tk.Button(shop_frame, text=f"Билеты +{ticket_price + 15}р ({cost_ticket}р)", font=("Sans", 11, "bold"), bg="#8c7ae6", fg="white", width=28, pady=4, command=buy_ticket); btn_t.pack(pady=4)
+tk.Button(shop_frame, text="СБРОСИТЬ ПРОГРЕСС", font=("Sans", 11, "bold"), bg="#c0392b", fg="white", width=28, pady=4, command=reset_all_progress).pack(pady=(8, 2))
 tk.Button(shop_frame, text="НАЗАД В МЕНЮ", font=("Sans", 11, "bold"), bg="#7f8fa6", fg="white", width=28, pady=5, command=close_shop).pack(pady=(12, 0))
+menu_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
 
 def toggle_doors():
     global doors
-    if game_state == "play" and speed < 0.35: doors = not doors
+    if game_state == "play" and speed < 0.35:
+        doors = not doors
 
 def key_down(e):
-    if e.keysym == "Escape": toggle_pause(); return
-    if game_state == "play":
-        keys.add(e.keycode); keys.add(e.keysym.lower())
-        if e.keycode == 65 or e.keysym.lower() == "space": toggle_doors()
+    ks = e.keysym.lower()
+    if ks == "escape":
+        toggle_pause()
+        return
+    if e.keycode in (25, 111) or ks in ("w", "up", "cyrillic_tse", "ц"):
+        keys.add("w")
+    elif e.keycode in (39, 116) or ks in ("s", "down", "cyrillic_yeru", "ы"):
+        keys.add("s")
+    elif e.keycode == 65 or ks == "space":
+        toggle_doors()
 
-def key_up(e): keys.discard(e.keycode); keys.discard(e.keysym.lower())
-root.bind_all("<KeyPress>", key_down); root.bind_all("<KeyRelease>", key_up)
+def key_up(e):
+    ks = e.keysym.lower()
+    if e.keycode in (25, 111) or ks in ("w", "up", "cyrillic_tse", "ц"):
+        keys.discard("w")
+    elif e.keycode in (39, 116) or ks in ("s", "down", "cyrillic_yeru", "ы"):
+        keys.discard("s")
 
-tk.Button(panel, text="ДВЕРИ", font=("Sans", 10, "bold"), bg="#27ae60", fg="white", command=toggle_doors).pack(side=tk.RIGHT, padx=5, pady=4)
-b_gas = tk.Button(panel, text="ГАЗ (W)", font=("Sans", 10, "bold"), bg="#2980b9", fg="white"); b_gas.pack(side=tk.RIGHT, padx=5, pady=4)
-b_gas.bind("<ButtonPress-1>", lambda e: globals().update(btn_gas=True)); b_gas.bind("<ButtonRelease-1>", lambda e: globals().update(btn_gas=False))
-b_brake = tk.Button(panel, text="ТОРМОЗ (S)", font=("Sans", 10, "bold"), bg="#c0392b", fg="white"); b_brake.pack(side=tk.RIGHT, padx=5, pady=4)
-b_brake.bind("<ButtonPress-1>", lambda e: globals().update(btn_brake=True)); b_brake.bind("<ButtonRelease-1>", lambda e: globals().update(btn_brake=False))
+root.bind_all("<KeyPress>", key_down)
+root.bind_all("<KeyRelease>", key_up)
+
+b_brake = tk.Button(btn_row, text="ТОРМОЗ (S)", font=("Sans", 12, "bold"), bg="#c0392b", fg="white", activebackground="#e74c3c", activeforeground="white", height=2)
+b_brake.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
+b_brake.bind("<ButtonPress-1>", lambda e: globals().update(btn_brake=True, btn_gas=False))
+b_brake.bind("<ButtonRelease-1>", lambda e: globals().update(btn_brake=False))
+
+b_doors = tk.Button(btn_row, text="ДВЕРИ", font=("Sans", 12, "bold"), bg="#27ae60", fg="white", activebackground="#2ecc71", activeforeground="white", height=2, command=toggle_doors)
+b_doors.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
+
+b_gas = tk.Button(btn_row, text="ГАЗ (W)", font=("Sans", 12, "bold"), bg="#2980b9", fg="white", activebackground="#3498db", activeforeground="white", height=2)
+b_gas.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3)
+b_gas.bind("<ButtonPress-1>", lambda e: globals().update(btn_gas=True, btn_brake=False))
+b_gas.bind("<ButtonRelease-1>", lambda e: globals().update(btn_gas=False))
+
+root.bind("<ButtonRelease-1>", lambda e: globals().update(btn_gas=False, btn_brake=False))
+
 def draw_person(px, py, dc, hc, step):
     ls = math.sin(step) * 3 if step > 0 else 0
     canvas.create_line(px - 3, py, px - 3 - ls, py + 8, fill="#ffbe76", width=2)
@@ -267,7 +340,8 @@ def draw_all():
     for cw_obj in crosswalks:
         cx = cw_obj["x"] - dist + 100
         if -150 < cx < 2500:
-            for zy in range(172, 310, 22): canvas.create_rectangle(cx - 28, zy, cx + 28, zy + 11, fill="#f5f6fa", outline="")
+            for zy in range(172, 310, 22):
+                canvas.create_rectangle(cx - 28, zy, cx + 28, zy + 11, fill="#f5f6fa", outline="")
             if cw_obj["light"]:
                 t_val = cw_obj["timer"] % 500
                 canvas.create_rectangle(cx + 28, 246, cx + 46, 294, fill="#1e272e", outline="white")
@@ -288,53 +362,84 @@ def draw_all():
         if -150 < cx < 2500:
             canvas.create_rectangle(cx, cy + 8, cx + 82, cy + 32, fill=c["c"], outline="black", width=2)
             canvas.create_polygon(cx + 14, cy + 8, cx + 24, cy - 2, cx + 58, cy - 2, cx + 68, cy + 8, fill=c["c"], outline="black", width=2)
-            fx = cx + 77 if c["dir"] == 1 else cx; canvas.create_rectangle(fx, cy + 12, fx + 5, cy + 19, fill="#fff200", outline="")
-            for wx in (cx + 12, cx + 56): canvas.create_oval(wx, cy + 25, wx + 15, cy + 40, fill="#1e272e", outline="black")
+            fx = cx + 77 if c["dir"] == 1 else cx
+            canvas.create_rectangle(fx, cy + 12, fx + 5, cy + 19, fill="#fff200", outline="")
+            for wx in (cx + 12, cx + 56):
+                canvas.create_oval(wx, cy + 25, wx + 15, cy + 40, fill="#1e272e", outline="black")
     bx, by = 100, 242
     canvas.create_rectangle(bx, by, bx + 135, by + 48, fill=bus_color, outline="black", width=2)
-    for i in range(3): canvas.create_rectangle(bx + 10 + i * 30, by + 8, bx + 32 + i * 30, by + 24, fill="#fff200" if people > i * 3 else "#dff9fb", outline="black")
+    for i in range(3):
+        canvas.create_rectangle(bx + 10 + i * 30, by + 8, bx + 32 + i * 30, by + 24, fill="#fff200" if people > i * 3 else "#dff9fb", outline="black")
     canvas.create_rectangle(bx + 105, by + 8, bx + 126, by + 44, fill="#4cd137" if doors else "#2f3640", outline="black")
-    canvas.create_oval(bx + 18, by + 38, bx + 38, by + 58, fill="black"); canvas.create_oval(bx + 96, by + 38, bx + 116, by + 58, fill="black")
+    canvas.create_oval(bx + 18, by + 38, bx + 38, by + 58, fill="black")
+    canvas.create_oval(bx + 96, by + 38, bx + 116, by + 58, fill="black")
     for ep in exiting_plist:
-        if ep["delay"] == 0: draw_person(ep["x"] - dist + 100, ep["y"], ep["d"], ep["h"], ep["step"])
+        if ep["delay"] == 0:
+            draw_person(ep["x"] - dist + 100, ep["y"], ep["d"], ep["h"], ep["step"])
     for s in stops:
-        for p in s["plist"]: draw_person(p["x"] - dist + 100, p["y"], p["d"], p["h"], p["step"])
-    for cw_obj in crosswalks:
-        for ped in []:
-            if not ped["hit"]: draw_person(cw_obj["x"] - dist + 100 + ped.get("dx", 0), ped["py"], ped["d"], ped["h"], ped["step"])
+        for p in s["plist"]:
+            draw_person(p["x"] - dist + 100, p["y"], p["d"], p["h"], p["step"])
     for sp in sidewalk_peds:
         spx = sp["x"] - dist + 100
-        if -100 < spx < 2500: draw_person(spx, sp.get("y", 148.0), sp["d"], sp["h"], sp["step"])
-    rw, rh = max(1, canvas.winfo_width()), max(1, canvas.winfo_height())
-    if rw > 10 and rh > 10: canvas.scale("all", 0, 0, rh / BASE_H, rh / BASE_H)
+        if -100 < spx < 2500:
+            draw_person(spx, sp["y"], sp["d"], sp["h"], sp["step"])
+    if rw > 10 and rh > 10:
+        canvas.scale("all", 0, 0, rh / BASE_H, rh / BASE_H)
+
 def loop():
     global speed, dist, money, people, board_timer, alert_text, alert_timer, speed_fine_timer, doors, stop_counter
     if game_state != "play":
-        draw_all(); root.after(16, loop); return
-    if alert_timer > 0: alert_timer -= 1
-    if speed_fine_timer > 0: speed_fine_timer -= 1
-    gas = btn_gas or bool(keys & {25, 111, "w", "up", "cyrillic_tse", "ц"})
-    brake = btn_brake or bool(keys & {39, 116, "s", "down", "cyrillic_yeru", "ы"})
-    if gas: doors = False; speed = min(10.0, speed + 0.08 + accel_bonus)
-    elif brake: speed = max(0.0, speed - 0.35)
-    else: speed = max(0.0, speed - 0.04)
-    if speed >= 9.0 and speed_fine_timer == 0: money = max(0, money - 10); alert_text = " | Штраф 90+ (-10р)"; alert_timer = 110; speed_fine_timer = 150
+        draw_all()
+        root.after(16, loop)
+        return
+    if alert_timer > 0:
+        alert_timer -= 1
+    if speed_fine_timer > 0:
+        speed_fine_timer -= 1
+    gas = btn_gas or ("w" in keys)
+    brake = btn_brake or ("s" in keys)
+    if brake:
+        keys.discard("w")
+        speed = max(0.0, speed - 0.38)
+    elif gas:
+        doors = False
+        speed = min(10.0, speed + 0.08 + accel_bonus)
+    else:
+        speed = max(0.0, speed - 0.05)
+    if speed >= 9.0 and speed_fine_timer == 0:
+        money = max(0, money - 100)
+        alert_text = " | Штраф 90+ (-100р)"
+        alert_timer = 110
+        speed_fine_timer = 150
     dist += speed
     if stops[-1]["x"] - dist < 4500:
-        nx = stops[-1]["x"] + random.randint(2800, 4200); stops.append(make_stop(nx)); stop_counter += 1
-        if stop_counter % 4 == 0: crosswalks.append(make_crosswalk(nx + 450, True))
-        elif stop_counter % 2 == 0: crosswalks.append(make_crosswalk(nx + 450, False))
+        nx = stops[-1]["x"] + random.randint(2800, 4200)
+        stops.append(make_stop(nx))
+        stop_counter += 1
+        if stop_counter % 4 == 0:
+            crosswalks.append(make_crosswalk(nx + 450, True))
+        elif stop_counter % 2 == 0:
+            crosswalks.append(make_crosswalk(nx + 450, False))
+    for cw_obj in crosswalks:
+        cw_obj["timer"] += 1
+        cx = cw_obj["x"] - dist + 100
+        is_red = cw_obj["light"] and (cw_obj["timer"] % 500 < 270)
+        if is_red and 80 < cx < 235 and speed > 0.5 and not cw_obj["fined"]:
+            money = max(0, money - 20)
+            alert_text = " | Красный (-20р)"
+            alert_timer = 130
+            cw_obj["fined"] = True
     for sp in sidewalk_peds:
-        if sp.get("cd", 0) > 0:
+        if sp["cd"] > 0:
             sp["cd"] -= 1
-        if sp.get("cross", 0) == 0:
+        if sp["cross"] == 0:
             sp["x"] += sp["dir"] * sp["v"]
             sp["step"] += 0.25
             if sp["x"] < dist - 400:
                 sp["x"] = dist + 2400 + random.randint(50, 300)
             elif sp["x"] > dist + 2600:
                 sp["x"] = dist - 200
-            if sp.get("cd", 0) == 0:
+            if sp["cd"] == 0:
                 for cw in crosswalks:
                     if abs(sp["x"] - cw["x"]) < 18:
                         sp["x"] = cw["x"] + random.randint(-12, 12)
@@ -358,28 +463,9 @@ def loop():
                     sp["cd"] = 220
             else:
                 sp["step"] = 0.0
-            if on_road and 235 < sp["y"] < 300 and 105 < (sp["x"] - dist + 100) < 230 and speed > 0.3 and sp.get("cd", 0) == 0:
-                sp["cd"] = 150
-                money = max(0, money - 10)
-                alert_text = " | Пешеход (-10р)"
-                alert_timer = 130
-    for cw_obj in crosswalks:
-        cw_obj["timer"] += 1; cx = cw_obj["x"] - dist + 100
-        is_red = cw_obj["light"] and (cw_obj["timer"] % 500 < 270)
-        is_green = cw_obj["light"] and (cw_obj["timer"] % 500 >= 270)
-        if is_red and 80 < cx < 235 and speed > 0.5 and not cw_obj["fined"]:
-            money = max(0, money - 20); alert_text = " | Красный (-20р)"; alert_timer = 130; cw_obj["fined"] = True
-        for ped in []:
-            on_road = 152 < ped["py"] < 328
-            if (not cw_obj["light"]) or is_red or on_road:
-                spd = ped.get("v", 1.1) * (1.4 if (is_green and on_road) else 1.0)
-                ped["py"] += ped["dir"] * spd; ped["step"] += 0.25
-                if ped["py"] >= 335: ped["py"] = 335.0; ped["dir"] = -1
-                elif ped["py"] <= 145: ped["py"] = 145.0; ped["dir"] = 1
-            else:
-                ped["step"] = 0.0
-            if on_road and not ped["hit"] and 235 < ped["py"] < 300 and 105 < cx + ped.get("dx", 0) < 230 and speed > 0.3:
-                ped["hit"] = True; money = max(0, money - 10); alert_text = " | Пешеход (-10р)"; alert_timer = 130
+            if on_road and 235 < sp["y"] < 300 and 105 < (sp["x"] - dist + 100) < 230 and speed > 0.3:
+                trigger_game_over()
+                break
     near_stop = False
     for s in stops:
         sx = s["x"] - dist + 100
@@ -388,52 +474,96 @@ def loop():
             if speed < 0.15 and not gas:
                 doors = True
                 if not s["exited"]:
-                    cnt = people // 2; people -= cnt; s["exited"] = True
-                    for i in range(cnt): exiting_plist.append({"x": dist + 115, "y": 285.0, "tx": s["x"] - 30 + i * 16, "ty": 338.0, "d": random.choice(dresses), "h": random.choice(hairs), "step": 0.0, "delay": i * 12})
+                    cnt = people // 2
+                    people -= cnt
+                    s["exited"] = True
+                    for i in range(cnt):
+                        exiting_plist.append({"x": dist + 115, "y": 285.0, "tx": s["x"] - 30 + i * 16, "ty": 338.0, "d": random.choice(dresses), "h": random.choice(hairs), "step": 0.0, "delay": i * 12})
             if doors:
                 board_timer += 1
                 if board_timer >= 15:
                     board_timer = 0
                     for pl in s["plist"]:
-                        if not pl["go"]: pl["go"] = True; break
+                        if not pl["go"]:
+                            pl["go"] = True
+                            break
                 for pl in s["plist"][:]:
                     if pl["go"]:
-                        px = pl["x"] - dist + 100; dx, dy = 215 - px, 285 - pl["y"]; d = (dx**2 + dy**2)**0.5
-                        if d < 8: s["plist"].remove(pl); people += 1; money += ticket_price
-                        else: pl["x"] += (dx / d) * 3.0; pl["y"] += (dy / d) * 3.0; pl["step"] += 0.4
+                        px = pl["x"] - dist + 100
+                        dx, dy = 215 - px, 285 - pl["y"]
+                        d = (dx**2 + dy**2)**0.5
+                        if d < 8:
+                            s["plist"].remove(pl)
+                            people += 1
+                            money += ticket_price
+                        else:
+                            pl["x"] += (dx / d) * 3.0
+                            pl["y"] += (dy / d) * 3.0
+                            pl["step"] += 0.4
     for ep in exiting_plist[:]:
-        if ep.get("done"): continue
-        if ep["delay"] > 0: ep["delay"] -= 1; continue
+        if ep.get("done"):
+            continue
+        if ep["delay"] > 0:
+            ep["delay"] -= 1
+            continue
         if not ep.get("on_path"):
-            dx, dy = ep["tx"] - ep["x"], 338.0 - ep["y"]; d = (dx**2 + dy**2)**0.5
-            if d < 6: ep["on_path"] = True; ep["goal_x"] = min([cw["x"] - 25 for cw in crosswalks if cw["x"] > ep["x"]] + [ep["x"] + 280])
-            else: ep["x"] += (dx / d) * 2.2; ep["y"] += (dy / d) * 2.2; ep["step"] += 0.4
+            dx, dy = ep["tx"] - ep["x"], 338.0 - ep["y"]
+            d = (dx**2 + dy**2)**0.5
+            if d < 6:
+                ep["on_path"] = True
+                ep["goal_x"] = min([cw["x"] - 25 for cw in crosswalks if cw["x"] > ep["x"]] + [ep["x"] + 280])
+            else:
+                ep["x"] += (dx / d) * 2.2
+                ep["y"] += (dy / d) * 2.2
+                ep["step"] += 0.4
         else:
-            if ep["x"] < ep["goal_x"]: ep["x"] += 1.3; ep["step"] += 0.3
-            else: ep["step"] = 0.0; ep["done"] = True
+            if ep["x"] < ep["goal_x"]:
+                ep["x"] += 1.3
+                ep["step"] += 0.3
+            else:
+                ep["step"] = 0.0
+                ep["done"] = True
     for c in cars:
-        if "cur_v" not in c: c["cur_v"] = c["v"]
+        if "cur_v" not in c:
+            c["cur_v"] = c["v"]
         tv = c["v"]
         if c["dir"] == 1:
-            if any(o is not c and o["dir"] == 1 and 0 < o["x"] - (c["x"] + 82) < 120 for o in cars): tv = 0.0
-            if 0 < dist - (c["x"] + 82) < 120: tv = 0.0
-            if any(sp.get("cross", 0) != 0 and 150 < sp.get("y", 148) < 335 and 0 < (sp["x"] - 35) - (c["x"] + 82) < 135 for sp in sidewalk_peds): tv = 0.0
-            if any(sp.get("cross", 0) != 0 and 150 < sp.get("y", 148) < 335 and 0 < c["x"] - (sp["x"] + 35) < 135 for sp in sidewalk_peds): tv = 0.0
-            if any(cw["light"] and (cw["timer"] % 500 < 270) and 0 < (cw["x"] - 35) - (c["x"] + 82) < 130 for cw in crosswalks): tv = 0.0
+            if any(o is not c and o["dir"] == 1 and 0 < o["x"] - (c["x"] + 82) < 120 for o in cars):
+                tv = 0.0
+            if 0 < dist - (c["x"] + 82) < 120:
+                tv = 0.0
+            if any(sp["cross"] != 0 and 150 < sp["y"] < 335 and 0 < (sp["x"] - 35) - (c["x"] + 82) < 135 for sp in sidewalk_peds):
+                tv = 0.0
+            if any(cw["light"] and (cw["timer"] % 500 < 270) and 0 < (cw["x"] - 35) - (c["x"] + 82) < 130 for cw in crosswalks):
+                tv = 0.0
         else:
-            if any(o is not c and o["dir"] == -1 and 0 < c["x"] - (o["x"] + 82) < 120 for o in cars): tv = 0.0
-            if any(cw["light"] and (cw["timer"] % 500 < 270) and 0 < c["x"] - (cw["x"] + 35) < 130 for cw in crosswalks): tv = 0.0
-        c["cur_v"] += (tv - c["cur_v"]) * 0.15; c["x"] += c["cur_v"]; cx = c["x"] - dist + 100
+            if any(o is not c and o["dir"] == -1 and 0 < c["x"] - (o["x"] + 82) < 120 for o in cars):
+                tv = 0.0
+            if any(sp["cross"] != 0 and 150 < sp["y"] < 335 and 0 < c["x"] - (sp["x"] + 35) < 135 for sp in sidewalk_peds):
+                tv = 0.0
+            if any(cw["light"] and (cw["timer"] % 500 < 270) and 0 < c["x"] - (cw["x"] + 35) < 130 for cw in crosswalks):
+                tv = 0.0
+        c["cur_v"] += (tv - c["cur_v"]) * 0.15
+        c["x"] += c["cur_v"]
+        cx = c["x"] - dist + 100
         if cx < -300 or cx > 2600:
             same = [o["x"] for o in cars if o["dir"] == c["dir"] and o is not c]
-            c["x"] = max(same + [dist + 2200]) + random.randint(150, 420); c["c"] = random.choice(car_colors)
-            c["v"] = random.uniform(4.8, 8.8) if c["dir"] == 1 else random.uniform(-7.0, -4.5); c["cur_v"] = c["v"]
-        if c["dir"] == 1 and 100 < cx + 82 and 235 > cx: speed = 0.0; money = max(0, money - 25); c["x"] += 170; alert_text = " | ДТП (-25р)"; alert_timer = 90
+            c["x"] = max(same + [dist + 2200]) + random.randint(150, 420)
+            c["c"] = random.choice(car_colors)
+            c["v"] = random.uniform(4.8, 8.8) if c["dir"] == 1 else random.uniform(-7.0, -4.5)
+            c["cur_v"] = c["v"]
+        if c["dir"] == 1 and 100 < cx + 82 and 235 > cx:
+            speed = 0.0
+            money = max(0, money - 200)
+            c["x"] += 170
+            alert_text = " | ДТП (-200р)"
+            alert_timer = 90
     draw_all()
     msg = alert_text if alert_timer > 0 else (" | Посадка..." if (near_stop and doors) else "")
-    label.config(text=f"Скорость: {int(speed*10)} км/ч | Деньги: {money}р | Пассажиры: {people}{msg}")
+    label.config(text=f"Скорость: {int(speed * 10)} км/ч | Деньги: {money}р | Пассажиры: {people}{msg}")
     root.after(16, loop)
-canvas.focus_force()
+
+canvas.focus_set()
 loop()
 root.protocol("WM_DELETE_WINDOW", lambda: (save_progress(), root.destroy()))
 root.mainloop()
