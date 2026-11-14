@@ -101,6 +101,7 @@ HTML_PAGE = """<!DOCTYPE html>
   </div>
   <div id="canvasWrap">
     <canvas id="cv"></canvas>
+    <button id="jumpBtn" style="display:none;position:absolute;bottom:18px;right:18px;width:130px;height:75px;background:rgba(0,255,204,0.25);border:3px solid #00ffcc;border-radius:16px;color:#00ffcc;font-size:18px;font-weight:bold;" onpointerdown="if(!actionPressed)jumpJustPressed=true;actionPressed=true;if(won)resetPlayer();" onpointerup="actionPressed=false;" onpointerleave="actionPressed=false;">ПРЫЖОК</button>
     <div id="camPad">
       <div></div><div class="cam-btn" onpointerdown="camMove(0,-1)" onpointerup="camStop()">▲</div><div></div>
       <div class="cam-btn" onpointerdown="camMove(-1,0)" onpointerup="camStop()">◄</div>
@@ -233,7 +234,7 @@ function openGame(mode) {
 function syncUI() {
   const isEdit = screenState === "edit";
   document.getElementById("editTools").style.display = isEdit ? "flex" : "none";
-  document.getElementById("camPad").style.display = isEdit ? "grid" : "none";
+  document.getElementById("camPad").style.display = isEdit ? "grid" : "none"; document.getElementById("jumpBtn").style.display = isEdit ? "none" : "block";
   const btn = document.getElementById("playToggleBtn");
   btn.textContent = isEdit ? "ИГРАТЬ" : "РЕДАКТОР";
   btn.style.background = isEdit ? "#00b894" : "#ff7675";
@@ -278,11 +279,7 @@ function isValidCell(gx, gy) {
 cv.addEventListener("pointerdown", e => {
   const rect = cv.getBoundingClientRect();
   const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-  if (screenState === "play") {
-    actionPressed = true;
-    if (won) resetPlayer();
-    return;
-  }
+  if (screenState === "play") { if (won) resetPlayer(); return; }
   if (screenState === "edit") {
     const [gx, gy] = screenToGrid(mx, my);
     const key = `${gx},${gy}`;
@@ -393,7 +390,19 @@ function update() {
           else { player.dead = true; return; }
         }
       }
-    } else if (obj === "spike") {
+    } else if (obj === "pad_yellow") {
+      if (collide(pBox, { x: ox + 4, y: oy + GRID - 14, w: GRID - 8, h: 14 })) {
+        player.vy = JUMP_FORCE * 1.45;
+        player.grounded = false;
+      }
+    } else if (obj === "pad_yellow") {
+    ctx.fillStyle = "#ffd32a";
+    ctx.strokeStyle = hl ? "#00ffcc" : "#fff200";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(sx + GRID/2, sy + GRID, GRID/2 - 4, Math.PI, 0);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (obj === "spike") {
       if (collide(pBox, { x: ox + 12, y: oy + 14, w: GRID - 24, h: GRID - 14 })) { player.dead = true; return; }
     } else if (obj === "portal_ship") {
       if (collide(pBox, { x: ox + 8, y: oy, w: GRID - 16, h: GRID })) player.mode = "ship";
