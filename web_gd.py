@@ -13,7 +13,8 @@ def get_default_levels():
     return {
         "Стартовый уровень": {
             "8,10": "spike",
-            "13,10": "block", "14,10": "block", "14,9": "spike",
+            "12,9": "orb_yellow",
+            "14,10": "spike", "15,10": "spike",
             "18,10": "portal_ship",
             "23,10": "spike", "24,10": "spike", "25,10": "spike",
             "24,2": "block", "24,3": "block",
@@ -47,15 +48,15 @@ HTML_PAGE = """<!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Cube Dash Mobile</title>
 <style>
-  * { box-sizing: border-box; user-select: none; -webkit-user-select: none; touch-action: none; }
-  body { margin: 0; background: #161626; color: #fff; font-family: sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
-  #menuScreen { display: flex; flex-direction: column; align-items: center; padding: 15px; height: 100%; overflow-y: auto; touch-action: pan-y; }
-  h1 { color: #00ffcc; margin: 10px 0 5px; font-size: 26px; text-align: center; }
-  .sub { color: #a0a0c0; font-size: 13px; margin-bottom: 15px; text-align: center; }
-  .btn-create { background: #00b894; color: #12121a; border: none; padding: 12px 22px; font-size: 16px; font-weight: bold; border-radius: 8px; margin-bottom: 15px; }
+  * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100dvh; background: #161626; color: #fff; font-family: sans-serif; overflow: hidden; }
+  #menuScreen { display: flex; flex-direction: column; align-items: center; padding: 15px; width: 100%; height: 100%; overflow-y: auto; }
+  h1 { color: #00ffcc; margin: 8px 0 4px; font-size: 24px; text-align: center; }
+  .sub { color: #a0a0c0; font-size: 13px; margin-bottom: 12px; text-align: center; }
+  .btn-create { background: #00b894; color: #12121a; border: none; padding: 12px 22px; font-size: 16px; font-weight: bold; border-radius: 8px; margin-bottom: 12px; }
   #levelList { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 8px; }
   .lvl-row { background: #2b2b40; padding: 10px 12px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
   .lvl-name { font-weight: bold; font-size: 15px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -63,21 +64,23 @@ HTML_PAGE = """<!DOCTYPE html>
   .b-play { background: #00b894; color: #12121a; }
   .b-edit { background: #0984e3; }
   .b-del { background: #d63031; }
-  #gameScreen { display: none; flex-direction: column; height: 100%; }
-  #toolbar { background: #1e1e2e; padding: 6px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; justify-content: space-between; }
+  #gameScreen { display: none; flex-direction: column; width: 100%; height: 100dvh; touch-action: none; }
+  #toolbar { background: #1e1e2e; padding: 5px 8px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; justify-content: space-between; flex-shrink: 0; }
   .t-group { display: flex; flex-wrap: wrap; gap: 4px; }
   .t-btn { background: #2b2b40; color: #fff; border: 1px solid #3f3f5f; padding: 6px 8px; border-radius: 5px; font-size: 12px; font-weight: bold; }
   .t-btn.active { background: #1d4d4f; border-color: #00ffcc; color: #00ffcc; }
-  #canvasWrap { position: relative; flex: 1; width: 100%; overflow: hidden; }
-  canvas { display: block; width: 100%; height: 100%; background: #161626; }
-  #camPad { position: absolute; bottom: 12px; right: 12px; display: grid; grid-template-columns: repeat(3, 42px); grid-template-rows: repeat(2, 42px); gap: 4px; }
-  .cam-btn { background: rgba(30, 30, 46, 0.85); color: #00ffcc; border: 1px solid #00ffcc; border-radius: 8px; font-size: 18px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
+  #canvasWrap { position: relative; flex: 1; width: 100%; height: 100%; overflow: hidden; touch-action: none; }
+  canvas { display: block; width: 100%; height: 100%; background: #161626; touch-action: none; }
+  #jumpBtn { display: none; position: fixed; bottom: 16px; right: 16px; width: 140px; height: 80px; background: rgba(0, 255, 204, 0.28); border: 3px solid #00ffcc; border-radius: 18px; color: #00ffcc; font-size: 18px; font-weight: bold; z-index: 999; touch-action: none; }
+  #jumpBtn:active { background: rgba(0, 255, 204, 0.6); color: #12121a; }
+  #camPad { position: fixed; bottom: 12px; right: 12px; display: grid; grid-template-columns: repeat(3, 42px); grid-template-rows: repeat(2, 42px); gap: 4px; z-index: 999; }
+  .cam-btn { background: rgba(30, 30, 46, 0.9); color: #00ffcc; border: 1px solid #00ffcc; border-radius: 8px; font-size: 18px; font-weight: bold; display: flex; align-items: center; justify-content: center; }
 </style>
 </head>
 <body>
 <div id="menuScreen">
   <h1>CUBE DASH MAKER</h1>
-  <div class="sub">Мобильная версия (общие уровни с ПК)</div>
+  <div class="sub">Мобильная версия (переверни экран горизонтально)</div>
   <button class="btn-create" onclick="createNew()">+ СОЗДАТЬ УРОВЕНЬ</button>
   <div id="levelList">Загрузка уровней...</div>
 </div>
@@ -88,6 +91,8 @@ HTML_PAGE = """<!DOCTYPE html>
       <button class="t-btn active" id="t_move" onclick="setTool('move')">Двигать</button>
       <button class="t-btn" id="t_block" onclick="setTool('block')">Блок</button>
       <button class="t-btn" id="t_spike" onclick="setTool('spike')">Шип</button>
+      <button class="t-btn" id="t_orb_yellow" onclick="setTool('orb_yellow')">Сфера</button>
+      <button class="t-btn" id="t_pad_yellow" onclick="setTool('pad_yellow')">Батут</button>
       <button class="t-btn" id="t_portal_ship" onclick="setTool('portal_ship')">Самолёт</button>
       <button class="t-btn" id="t_portal_cube" onclick="setTool('portal_cube')">Куб</button>
       <button class="t-btn" id="t_goal" onclick="setTool('goal')">Финиш</button>
@@ -101,12 +106,12 @@ HTML_PAGE = """<!DOCTYPE html>
   </div>
   <div id="canvasWrap">
     <canvas id="cv"></canvas>
-    <button id="jumpBtn" style="display:none;position:absolute;bottom:18px;right:18px;width:130px;height:75px;background:rgba(0,255,204,0.25);border:3px solid #00ffcc;border-radius:16px;color:#00ffcc;font-size:18px;font-weight:bold;" onpointerdown="if(!actionPressed)jumpJustPressed=true;actionPressed=true;if(won)resetPlayer();" onpointerup="actionPressed=false;" onpointerleave="actionPressed=false;">ПРЫЖОК</button>
+    <button id="jumpBtn">ПРЫЖОК</button>
     <div id="camPad">
-      <div></div><div class="cam-btn" onpointerdown="camMove(0,-1)" onpointerup="camStop()">▲</div><div></div>
-      <div class="cam-btn" onpointerdown="camMove(-1,0)" onpointerup="camStop()">◄</div>
-      <div class="cam-btn" onpointerdown="camMove(0,1)" onpointerup="camStop()">▼</div>
-      <div class="cam-btn" onpointerdown="camMove(1,0)" onpointerup="camStop()">►</div>
+      <div></div><div class="cam-btn" id="cUp">▲</div><div></div>
+      <div class="cam-btn" id="cLeft">◄</div>
+      <div class="cam-btn" id="cDown">▼</div>
+      <div class="cam-btn" id="cRight">►</div>
     </div>
   </div>
 </div>
@@ -122,23 +127,53 @@ let level = new Map();
 let screenState = "menu";
 let tool = "move";
 let camX = 0, camY = 0, camVX = 0, camVY = 0;
-let actionPressed = false, won = false, deadTimer = 0;
+let actionPressed = false, jumpJustPressed = false, usedOrbs = new Set(), won = false, deadTimer = 0;
 let dragObj = null, dragOrigin = null, dragPos = {x:0, y:0};
 
 const cv = document.getElementById("cv");
 const ctx = cv.getContext("2d");
-let W = 900, H = 440, FLOOR_Y = 400;
+let W = window.innerWidth, H = window.innerHeight - 45, FLOOR_Y = H - 30;
 
 function resizeCanvas() {
   const wrap = document.getElementById("canvasWrap");
   W = cv.width = wrap.clientWidth || window.innerWidth;
-  H = cv.height = wrap.clientHeight || (window.innerHeight - 50);
-  FLOOR_Y = Math.floor((H - 20) / GRID) * GRID;
-  if (FLOOR_Y < 200) FLOOR_Y = H - 30;
+  H = cv.height = wrap.clientHeight || (window.innerHeight - 45);
+  FLOOR_Y = H - 24;
 }
 window.addEventListener("resize", resizeCanvas);
+window.addEventListener("orientationchange", () => setTimeout(resizeCanvas, 150));
 
 const player = { x: 80, y: 0, vy: 0, grounded: true, dead: false, mode: "cube" };
+
+function pressJump(e) {
+  if (e) e.preventDefault();
+  if (!actionPressed) jumpJustPressed = true;
+  actionPressed = true;
+  if (won) resetPlayer();
+}
+function releaseJump(e) {
+  if (e) e.preventDefault();
+  actionPressed = false;
+}
+
+const jBtn = document.getElementById("jumpBtn");
+jBtn.addEventListener("touchstart", pressJump, {passive: false});
+jBtn.addEventListener("touchend", releaseJump, {passive: false});
+jBtn.addEventListener("touchcancel", releaseJump, {passive: false});
+jBtn.addEventListener("mousedown", pressJump);
+jBtn.addEventListener("mouseup", releaseJump);
+jBtn.addEventListener("mouseleave", releaseJump);
+
+function bindCam(id, dx, dy) {
+  const el = document.getElementById(id);
+  const start = (e) => { e.preventDefault(); camVX = dx * 10; camVY = dy * 10; };
+  const stop = (e) => { e.preventDefault(); camVX = 0; camVY = 0; };
+  el.addEventListener("touchstart", start, {passive: false});
+  el.addEventListener("touchend", stop, {passive: false});
+  el.addEventListener("mousedown", start);
+  el.addEventListener("mouseup", stop);
+}
+bindCam("cUp", 0, -1); bindCam("cDown", 0, 1); bindCam("cLeft", -1, 0); bindCam("cRight", 1, 0);
 
 async function fetchLevels() {
   const res = await fetch("/api/levels");
@@ -152,12 +187,13 @@ function renderMenu() {
   for (const name of Object.keys(savedLevels)) {
     const row = document.createElement("div");
     row.className = "lvl-row";
+    const safe = name.replace(/'/g, "\\'");
     const delBtn = name !== "Стартовый уровень"
-      ? `<button class="btn-sm b-del" onclick="delLevel('${name.replace(/'/g, "\\'")}')">X</button>` : "";
+      ? `<button class="btn-sm b-del" onclick="delLevel('${safe}')">X</button>` : "";
     row.innerHTML = `
       <div class="lvl-name">${name}</div>
-      <button class="btn-sm b-play" onclick="startLevel('${name.replace(/'/g, "\\'")}', 'play')">ИГРАТЬ</button>
-      <button class="btn-sm b-edit" onclick="startLevel('${name.replace(/'/g, "\\'")}', 'edit')">Ред.</button>
+      <button class="btn-sm b-play" onclick="startLevel('${safe}', 'play')">ИГРАТЬ</button>
+      <button class="btn-sm b-edit" onclick="startLevel('${safe}', 'edit')">Ред.</button>
       ${delBtn}
     `;
     list.appendChild(row);
@@ -182,6 +218,7 @@ function createNew() {
 function startLevel(name, mode) {
   currentName = name;
   level.clear();
+  openGame(mode);
   const raw = savedLevels[name] || {};
   const floorRow = Math.floor(FLOOR_Y / GRID) - 1;
   const shiftY = floorRow - 10;
@@ -189,7 +226,7 @@ function startLevel(name, mode) {
     const [gx, gy] = k.split(",").map(Number);
     level.set(`${gx},${gy + shiftY}`, v);
   }
-  openGame(mode);
+  if (mode === "play") resetPlayer();
 }
 
 async function delLevel(name) {
@@ -234,10 +271,12 @@ function openGame(mode) {
 function syncUI() {
   const isEdit = screenState === "edit";
   document.getElementById("editTools").style.display = isEdit ? "flex" : "none";
-  document.getElementById("camPad").style.display = isEdit ? "grid" : "none"; document.getElementById("jumpBtn").style.display = isEdit ? "none" : "block";
+  document.getElementById("camPad").style.display = isEdit ? "grid" : "none";
+  document.getElementById("jumpBtn").style.display = isEdit ? "none" : "block";
   const btn = document.getElementById("playToggleBtn");
   btn.textContent = isEdit ? "ИГРАТЬ" : "РЕДАКТОР";
   btn.style.background = isEdit ? "#00b894" : "#ff7675";
+  setTimeout(resizeCanvas, 50);
 }
 
 function setTool(t) {
@@ -257,13 +296,11 @@ function toggleMode() {
 }
 
 function resetPlayer() {
+  usedOrbs.clear(); jumpJustPressed = false;
   player.x = 80; player.y = FLOOR_Y - GRID;
   player.vy = 0; player.grounded = true; player.dead = false; player.mode = "cube";
   camX = 0; camY = 0; won = false; deadTimer = 0;
 }
-
-function camMove(dx, dy) { camVX = dx * 10; camVY = dy * 10; }
-function camStop() { camVX = 0; camVY = 0; }
 function screenToGrid(mx, my) {
   return [Math.floor((mx + camX) / GRID), Math.floor((my + camY) / GRID)];
 }
@@ -276,31 +313,33 @@ function isValidCell(gx, gy) {
   return true;
 }
 
-cv.addEventListener("pointerdown", e => {
+function getTouchPos(e) {
   const rect = cv.getBoundingClientRect();
-  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-  if (screenState === "play") { if (won) resetPlayer(); return; }
-  if (screenState === "edit") {
-    const [gx, gy] = screenToGrid(mx, my);
-    const key = `${gx},${gy}`;
-    if (tool === "move") {
-      if (level.has(key)) {
-        dragObj = level.get(key);
-        level.delete(key);
-        dragOrigin = key;
-        dragPos = {x: mx, y: my};
-      }
-    } else if (isValidCell(gx, gy)) {
-      if (tool === "erase") level.delete(key);
-      else level.set(key, tool);
-    }
-  }
-});
+  const t = e.touches ? e.touches : e;
+  return [t.clientX - rect.left, t.clientY - rect.top];
+}
 
-cv.addEventListener("pointermove", e => {
-  if (screenState !== "edit" || e.buttons === 0) return;
-  const rect = cv.getBoundingClientRect();
-  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+function handleEditStart(e) {
+  if (screenState !== "edit") return;
+  e.preventDefault();
+  const [mx, my] = getTouchPos(e);
+  const [gx, gy] = screenToGrid(mx, my);
+  const key = `${gx},${gy}`;
+  if (tool === "move") {
+    if (level.has(key)) {
+      dragObj = level.get(key); level.delete(key); dragOrigin = key; dragPos = {x: mx, y: my};
+    }
+  } else if (isValidCell(gx, gy)) {
+    if (tool === "erase") level.delete(key);
+    else level.set(key, tool);
+  }
+}
+
+function handleEditMove(e) {
+  if (screenState !== "edit") return;
+  if (e.type === "mousemove" && e.buttons === 0) return;
+  e.preventDefault();
+  const [mx, my] = getTouchPos(e);
   if (tool === "move" && dragObj) {
     dragPos = {x: mx, y: my};
   } else if (tool !== "move") {
@@ -311,32 +350,30 @@ cv.addEventListener("pointermove", e => {
       else level.set(key, tool);
     }
   }
-});
+}
 
-window.addEventListener("pointerup", e => {
-  actionPressed = false;
+function handleEditEnd(e) {
   if (screenState === "edit" && dragObj) {
-    const rect = cv.getBoundingClientRect();
-    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    const [gx, gy] = screenToGrid(mx, my);
+    const [gx, gy] = screenToGrid(dragPos.x, dragPos.y);
     const key = `${gx},${gy}`;
     if (isValidCell(gx, gy) && !level.has(key)) level.set(key, dragObj);
     else level.set(dragOrigin, dragObj);
     dragObj = null; dragOrigin = null;
   }
-});
+}
+
+cv.addEventListener("touchstart", handleEditStart, {passive: false});
+cv.addEventListener("touchmove", handleEditMove, {passive: false});
+cv.addEventListener("touchend", handleEditEnd, {passive: false});
+cv.addEventListener("mousedown", handleEditStart);
+cv.addEventListener("mousemove", handleEditMove);
+window.addEventListener("mouseup", handleEditEnd);
 
 window.addEventListener("keydown", e => {
-  if (e.code === "Space") { e.preventDefault(); actionPressed = true; if (won) resetPlayer(); }
-  if (e.code === "ArrowRight") camVX = 10;
-  if (e.code === "ArrowLeft") camVX = -10;
-  if (e.code === "ArrowUp") camVY = -10;
-  if (e.code === "ArrowDown") camVY = 10;
+  if (e.code === "Space") { e.preventDefault(); pressJump(); }
 });
 window.addEventListener("keyup", e => {
-  if (e.code === "Space") actionPressed = false;
-  if (["ArrowRight","ArrowLeft"].includes(e.code)) camVX = 0;
-  if (["ArrowUp","ArrowDown"].includes(e.code)) camVY = 0;
+  if (e.code === "Space") releaseJump();
 });
 
 function collide(a, b) {
@@ -356,6 +393,19 @@ function update() {
     if (deadTimer >= 300) resetPlayer();
     return;
   }
+
+  if (player.mode === "cube" && jumpJustPressed) {
+    const oBox = { x: player.x - 14, y: player.y - 14, w: GRID + 28, h: GRID + 28 };
+    for (const [k, obj] of level.entries()) {
+      if (obj === "orb_yellow" && !usedOrbs.has(k)) {
+        const [gx, gy] = k.split(",").map(Number);
+        if (collide(oBox, { x: gx*GRID, y: gy*GRID, w: GRID, h: GRID })) {
+          player.vy = JUMP_FORCE; player.grounded = false; usedOrbs.add(k); break;
+        }
+      }
+    }
+  }
+  jumpJustPressed = false;
 
   if (player.mode === "cube") {
     if (actionPressed && player.grounded) { player.vy = JUMP_FORCE; player.grounded = false; }
@@ -392,17 +442,9 @@ function update() {
       }
     } else if (obj === "pad_yellow") {
       if (collide(pBox, { x: ox + 4, y: oy + GRID - 14, w: GRID - 8, h: 14 })) {
-        player.vy = JUMP_FORCE * 1.45;
-        player.grounded = false;
+        player.vy = JUMP_FORCE * 1.45; player.grounded = false;
       }
-    } else if (obj === "pad_yellow") {
-    ctx.fillStyle = "#ffd32a";
-    ctx.strokeStyle = hl ? "#00ffcc" : "#fff200";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(sx + GRID/2, sy + GRID, GRID/2 - 4, Math.PI, 0);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-  } else if (obj === "spike") {
+    } else if (obj === "spike") {
       if (collide(pBox, { x: ox + 12, y: oy + 14, w: GRID - 24, h: GRID - 14 })) { player.dead = true; return; }
     } else if (obj === "portal_ship") {
       if (collide(pBox, { x: ox + 8, y: oy, w: GRID - 16, h: GRID })) player.mode = "ship";
@@ -413,7 +455,7 @@ function update() {
     }
   }
 
-  camX = Math.max(0, player.x - W * 0.25);
+  camX = Math.max(0, player.x - W * 0.22);
   const targetCY = Math.min(0, Math.max(MAX_SKY_Y, player.y - H * 0.45));
   camY += (targetCY - camY) * 0.15;
 }
@@ -422,6 +464,14 @@ function drawObj(sx, sy, obj, hl=false) {
   if (obj === "block") {
     ctx.fillStyle = "#2d3436"; ctx.fillRect(sx, sy, GRID, GRID);
     ctx.strokeStyle = hl ? "#00ffcc" : "#74b9ff"; ctx.lineWidth = 2; ctx.strokeRect(sx, sy, GRID, GRID);
+  } else if (obj === "orb_yellow") {
+    ctx.strokeStyle = hl ? "#00ffcc" : "#fff200"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx + GRID/2, sy + GRID/2, GRID/2 + 6, 0, Math.PI*2); ctx.stroke();
+    ctx.fillStyle = "#ffd32a";
+    ctx.beginPath(); ctx.arc(sx + GRID/2, sy + GRID/2, GRID/2 - 1, 0, Math.PI*2); ctx.fill();
+  } else if (obj === "pad_yellow") {
+    ctx.fillStyle = "#ffd32a"; ctx.strokeStyle = hl ? "#00ffcc" : "#fff200"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx + GRID/2, sy + GRID, GRID/2 - 4, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
   } else if (obj === "spike") {
     ctx.fillStyle = "#ff4757"; ctx.beginPath();
     ctx.moveTo(sx + GRID/2, sy + 4); ctx.lineTo(sx + GRID - 3, sy + GRID); ctx.lineTo(sx + 3, sy + GRID);
@@ -485,39 +535,4 @@ function draw() {
     ctx.strokeStyle = "#00ffcc"; ctx.lineWidth = 3; ctx.strokeRect(W*0.15, H/2 - 60, W*0.7, 120);
     ctx.fillStyle = "#00ffcc"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
     ctx.fillText("УРОВЕНЬ ПРОЙДЕН!", W/2, H/2 - 15);
-    ctx.fillStyle = "#fff"; ctx.font = "13px sans-serif";
-    ctx.fillText("Нажми на экран, чтобы сыграть снова", W/2, H/2 + 25);
-  }
-}
-
-function loop() { update(); draw(); requestAnimationFrame(loop); }
-fetchLevels(); loop();
-</script>
-</body>
-</html>
-"""
-
-
-class Handler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/api/levels":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(json.dumps(load_levels(), ensure_ascii=False).encode("utf-8"))
-        else:
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(HTML_PAGE.encode("utf-8"))
-
-    def do_POST(self):
-        if self.path == "/api/levels":
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length).decode("utf-8")
-            save_levels(json.loads(body))
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"ok")
-
 
