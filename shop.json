@@ -1,0 +1,9 @@
+{
+  "coins": 86,
+  "unlocked": [
+    "classic",
+    "neon",
+    "fire"
+  ],
+  "selected": "fire"
+}
